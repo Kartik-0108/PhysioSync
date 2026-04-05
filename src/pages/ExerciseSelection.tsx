@@ -72,14 +72,16 @@ export default function ExerciseSelection() {
   };
 
   const handleStart = async (exercise: ExerciseTemplate) => {
-    if (!profile) return;
+    if (!profile) {
+      console.error("No profile found in useAuthStore");
+      return;
+    }
     setStarting(exercise.id);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = format(new Date(), 'yyyy-MM-dd');
       console.log("Starting exercise for profile:", profile.uid);
       
-      // 1. Create master exercise if it doesn't exist (or just use a dummy ID if it's self-guided)
-      // For simplicity, we'll just add to todays_plan directly for self-guided sessions
+      // 1. Add to daily plan
       const planId = await dailyPlanService.addToPlan({
         userId: profile.uid,
         exerciseId: '', // Self-guided
@@ -91,11 +93,8 @@ export default function ExerciseSelection() {
       });
       console.log("Plan created with ID:", planId);
 
-      // We still need a master exercise ID for the session page to fetch details if it relies on 'exercises' collection
-      // But wait, ExerciseSession fetches from 'exercises' collection.
-      // So I MUST create a master exercise doc too.
-      
-      const docRef = await addDoc(collection(db, 'exercises'), {
+      // 2. Create exercise session document
+      const exerciseData = {
         doctorId: 'self',
         patientId: profile.uid,
         addedBy: 'patient',
@@ -106,12 +105,15 @@ export default function ExerciseSelection() {
         status: 'in_progress',
         date: today,
         createdAt: serverTimestamp()
-      });
+      };
+      
+      console.log("Creating exercise doc with data:", exerciseData);
+      const docRef = await addDoc(collection(db, 'exercises'), exerciseData);
       console.log("Exercise doc created with ID:", docRef.id);
 
       navigate(`/exercise/${docRef.id}?planId=${planId}`);
     } catch (error) {
-      console.error("Error creating exercise:", error);
+      console.error("Error in handleStart:", error);
       setStarting(null);
     }
   };

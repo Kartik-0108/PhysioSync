@@ -86,24 +86,35 @@ export default function ExerciseSession() {
     try {
       console.log("Fetching exercise with ID:", exerciseId);
       console.log("Current user profile:", profile);
-      const docRef = doc(db, 'exercises', exerciseId!);
+      
+      if (!exerciseId) {
+        console.error("No exerciseId provided in URL");
+        setLoading(false);
+        return;
+      }
+
+      const docRef = doc(db, 'exercises', exerciseId);
       const docSnap = await getDoc(docRef);
+      
       if (docSnap.exists()) {
         const data = docSnap.data();
-        console.log("Exercise data fetched:", data);
+        console.log("Exercise data fetched successfully:", data);
         setExercise({ id: docSnap.id, ...data });
         
         // Find the template from the library
         const foundTemplate = EXERCISE_LIBRARY.find(ex => ex.id === data.type);
         if (foundTemplate) {
+          console.log("Template found:", foundTemplate.name);
           setTemplate(foundTemplate);
+        } else {
+          console.error("Template not found for type:", data.type);
         }
       } else {
-        console.warn("Exercise document does not exist!");
+        console.warn("Exercise document does not exist in Firestore at path: exercises/" + exerciseId);
       }
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching exercise:", error);
+      console.error("Error in fetchExercise:", error);
       setLoading(false);
     }
   };
