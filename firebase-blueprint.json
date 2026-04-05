@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application, either a doctor or a patient.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["doctor", "patient"] },
+        "doctorId": { "type": "string", "description": "For patients, the ID of their assigned doctor." },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["uid", "email", "name", "role", "createdAt"]
+    },
+    "Exercise": {
+      "title": "Exercise Assignment",
+      "description": "An exercise routine assigned by a doctor to a patient, or self-assigned by a patient.",
+      "type": "object",
+      "properties": {
+        "doctorId": { "type": "string", "description": "The ID of the doctor who assigned the exercise, or 'self' if self-assigned." },
+        "patientId": { "type": "string" },
+        "addedBy": { "type": "string", "enum": ["doctor", "patient"] },
+        "type": { "type": "string", "enum": ["squat", "arm_raise", "knee_bend", "spine_extension", "neck_rotation", "full_body_stretch", "push_up", "bicep_curl", "lunge"] },
+        "name": { "type": "string" },
+        "targetReps": { "type": "number" },
+        "durationDays": { "type": "number" },
+        "difficulty": { "type": "string", "enum": ["Easy", "Medium", "Hard"] },
+        "status": { "type": "string", "enum": ["assigned", "completed"] },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["doctorId", "patientId", "type", "targetReps", "status", "createdAt"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "The performance result of an exercise completed by a patient.",
+      "type": "object",
+      "properties": {
+        "exerciseId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "accuracy": { "type": "number", "description": "Accuracy score from 0 to 100" },
+        "mistakes": { "type": "array", "items": { "type": "string" } },
+        "videoUrl": { "type": "string", "format": "uri" },
+        "completedAt": { "type": "timestamp" }
+      },
+      "required": ["exerciseId", "patientId", "doctorId", "accuracy", "mistakes", "completedAt"]
+    },
+    "DailyPlan": {
+      "title": "Daily Plan Item",
+      "description": "An exercise scheduled for a specific day for a patient.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "exerciseId": { "type": "string", "description": "Reference to the master exercise assignment if applicable." },
+        "exerciseType": { "type": "string" },
+        "exerciseName": { "type": "string" },
+        "date": { "type": "string", "description": "Format YYYY-MM-DD" },
+        "status": { "type": "string", "enum": ["not_started", "in_progress", "completed"] },
+        "addedBy": { "type": "string", "enum": ["doctor", "patient"] },
+        "targetReps": { "type": "number" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["userId", "exerciseType", "exerciseName", "date", "status", "addedBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles."
+    },
+    "exercises/{exerciseId}": {
+      "schema": { "$ref": "#/entities/Exercise" },
+      "description": "Stores assigned exercises."
+    },
+    "results/{resultId}": {
+      "schema": { "$ref": "#/entities/Result" },
+      "description": "Stores exercise performance results."
+    },
+    "todays_plan/{planId}": {
+      "schema": { "$ref": "#/entities/DailyPlan" },
+      "description": "Stores daily exercise plans for patients."
+    }
+  }
+}

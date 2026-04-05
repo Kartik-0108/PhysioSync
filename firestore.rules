@@ -1,0 +1,243 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - email: string (required)
+    //   - name: string (required)
+    //   - role: string (required, 'doctor' or 'patient', immutable)
+    //   - doctorId: string (optional, for patients)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: exercises
+    // Document ID: {exerciseId}
+    // Fields:
+    //   - doctorId: string (required, immutable)
+    //   - patientId: string (required, immutable)
+    //   - type: string (required, 'squat', 'arm_raise', 'knee_bend')
+    //   - targetReps: number (required)
+    //   - status: string (required, 'assigned', 'completed')
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: results
+    // Document ID: {resultId}
+    // Fields:
+    //   - exerciseId: string (required, immutable)
+    //   - patientId: string (required, immutable)
+    //   - doctorId: string (required, immutable)
+    //   - accuracy: number (required, 0-100)
+    //   - mistakes: list of strings (required)
+    //   - videoUrl: string (optional)
+    //   - completedAt: timestamp (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isDoctor() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'doctor';
+    }
+
+    function isPatient() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'patient';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "kartikdevadiga01@gmail.com" && request.auth.token.email_verified == true)); // Default admin
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'name', 'role', 'createdAt']) &&
+             data.uid is string &&
+             data.email is string && isValidEmail(data.email) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.role in ['doctor', 'patient'] &&
+             data.createdAt is timestamp &&
+             (!('doctorId' in data) || (data.doctorId is string && data.doctorId.size() < 100));
+    }
+
+    function isValidExercise(data) {
+      return hasRequiredFields(['doctorId', 'patientId', 'type', 'targetReps', 'status', 'createdAt']) &&
+             data.doctorId is string && data.doctorId.size() > 0 &&
+             data.patientId is string && data.patientId.size() > 0 &&
+             (!('addedBy' in data) || data.addedBy in ['patient', 'doctor']) &&
+             data.type in ['squat', 'arm_raise', 'knee_bend', 'spine_extension', 'neck_rotation', 'full_body_stretch', 'push_up', 'bicep_curl', 'lunge'] &&
+             (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() < 100)) &&
+             data.targetReps is number && data.targetReps > 0 && data.targetReps <= 100 &&
+             (!('durationDays' in data) || (data.durationDays is number && data.durationDays > 0 && data.durationDays <= 365)) &&
+             (!('difficulty' in data) || (data.difficulty in ['Easy', 'Medium', 'Hard'])) &&
+             (!('date' in data) || (data.date is string && data.date.size() == 10)) &&
+             data.status in ['assigned', 'completed'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidResult(data) {
+      return hasRequiredFields(['exerciseId', 'patientId', 'doctorId', 'accuracy', 'mistakes', 'completedAt']) &&
+             data.exerciseId is string && data.exerciseId.size() > 0 &&
+             data.patientId is string && data.patientId.size() > 0 &&
+             data.doctorId is string && data.doctorId.size() > 0 &&
+             data.accuracy is number && data.accuracy >= 0 && data.accuracy <= 100 &&
+             data.mistakes is list && data.mistakes.size() <= 20 &&
+             (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() < 1000)) &&
+             data.completedAt is timestamp;
+    }
+
+    function isValidDailyPlan(data) {
+      return hasRequiredFields(['userId', 'exerciseType', 'exerciseName', 'date', 'status', 'addedBy', 'createdAt']) &&
+             data.userId is string &&
+             data.exerciseType is string &&
+             data.exerciseName is string &&
+             data.date is string && data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
+             data.status in ['not_started', 'in_progress', 'completed'] &&
+             data.addedBy in ['doctor', 'patient'] &&
+             (!('targetReps' in data) || (data.targetReps is number && data.targetReps > 0)) &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Create: User can create their own profile. Role must be 'doctor' or 'patient'.
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && uidUnchanged();
+      
+      // Read: Users can read their own profile. Doctors can read all patient profiles.
+      allow read: if isOwner(userId) || (isDoctor() && resource.data.role == 'patient') || isAdmin();
+      
+      // Update: Users can update their own profile, but cannot change their role or uid.
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && uidNotModified() && request.resource.data.role == resource.data.role && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /exercises/{exerciseId} {
+      // Create: Doctors can assign exercises. Patients can self-assign exercises (doctorId = 'self').
+      allow create: if isAuthenticated() && isValidExercise(request.resource.data) && (
+        (isDoctor() && request.resource.data.doctorId == request.auth.uid) ||
+        (isPatient() && request.resource.data.patientId == request.auth.uid && request.resource.data.doctorId == 'self')
+      );
+      
+      // Read: Doctors can read exercises they assigned. Patients can read exercises assigned to them.
+      allow read: if isAuthenticated() && (resource.data.doctorId == request.auth.uid || resource.data.patientId == request.auth.uid);
+      
+      // Update: 
+      // - Doctors can update exercises they assigned (e.g., change target reps, but not doctorId/patientId/createdAt).
+      // - Patients can update exercises assigned to them (e.g., mark as completed, but not change doctorId/patientId/type/targetReps/createdAt).
+      allow update: if isAuthenticated() && isValidExercise(request.resource.data) &&
+                    request.resource.data.doctorId == resource.data.doctorId &&
+                    request.resource.data.patientId == resource.data.patientId &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    (
+                      (isDoctor() && resource.data.doctorId == request.auth.uid) ||
+                      (isPatient() && resource.data.patientId == request.auth.uid && request.resource.data.type == resource.data.type && request.resource.data.targetReps == resource.data.targetReps)
+                    );
+                    
+      // Delete:
+      // - Doctors can delete exercises they assigned.
+      // - Patients can delete exercises they added themselves.
+      allow delete: if isAuthenticated() && (
+        (isDoctor() && resource.data.doctorId == request.auth.uid) ||
+        (isPatient() && resource.data.patientId == request.auth.uid && (resource.data.addedBy == 'patient' || resource.data.doctorId == 'self'))
+      );
+    }
+
+    match /results/{resultId} {
+      // Create: Patients can create results for themselves.
+      allow create: if isPatient() && isValidResult(request.resource.data) && request.resource.data.patientId == request.auth.uid;
+      
+      // Read: Doctors can read results for their patients. Patients can read their own results.
+      allow read: if isAuthenticated() && (resource.data.doctorId == request.auth.uid || resource.data.patientId == request.auth.uid);
+      
+      // Update: Results should generally be immutable after creation, but if needed, only the patient can update their own result, and core fields must not change.
+      allow update: if isPatient() && isValidResult(request.resource.data) &&
+                    request.resource.data.patientId == request.auth.uid &&
+                    resource.data.patientId == request.auth.uid &&
+                    request.resource.data.exerciseId == resource.data.exerciseId &&
+                    request.resource.data.doctorId == resource.data.doctorId &&
+                    request.resource.data.completedAt == resource.data.completedAt;
+    }
+
+    match /notifications/{notificationId} {
+      // Create: Doctors can create notifications for patients.
+      allow create: if isAuthenticated() && 
+                    request.resource.data.userId is string &&
+                    request.resource.data.title is string &&
+                    request.resource.data.message is string &&
+                    request.resource.data.type in ['assigned', 'completed', 'feedback'] &&
+                    request.resource.data.read == false &&
+                    request.resource.data.createdAt is timestamp;
+      
+      // Read: Users can read their own notifications.
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Update: Users can update their own notifications (to mark as read).
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid &&
+                    request.resource.data.userId == resource.data.userId &&
+                    request.resource.data.title == resource.data.title &&
+                    request.resource.data.message == resource.data.message &&
+                    request.resource.data.type == resource.data.type &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /todays_plan/{planId} {
+      allow create: if isAuthenticated() && isValidDailyPlan(request.resource.data) && (
+        (isPatient() && request.resource.data.userId == request.auth.uid && request.resource.data.addedBy == 'patient') ||
+        (isDoctor())
+      );
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isDoctor());
+      allow update: if isAuthenticated() && isValidDailyPlan(request.resource.data) &&
+                    request.resource.data.userId == resource.data.userId &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    (
+                      (isPatient() && resource.data.userId == request.auth.uid) ||
+                      (isDoctor())
+                    );
+      allow delete: if isAuthenticated() && (
+        (isPatient() && resource.data.userId == request.auth.uid && resource.data.addedBy == 'patient') ||
+        (isDoctor())
+      );
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "PhysioSync",
+  "description": "AI-powered physiotherapy application with real-time pose estimation and doctor-patient dashboards.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
