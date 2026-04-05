@@ -104,13 +104,13 @@ service cloud.firestore {
              data.doctorId is string && data.doctorId.size() > 0 &&
              data.patientId is string && data.patientId.size() > 0 &&
              (!('addedBy' in data) || data.addedBy in ['patient', 'doctor']) &&
-             data.type in ['squat', 'arm_raise', 'knee_bend', 'spine_extension', 'neck_rotation', 'full_body_stretch', 'push_up', 'bicep_curl', 'lunge'] &&
+             data.type is string && data.type.size() > 0 &&
              (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() < 100)) &&
              data.targetReps is number && data.targetReps > 0 && data.targetReps <= 100 &&
              (!('durationDays' in data) || (data.durationDays is number && data.durationDays > 0 && data.durationDays <= 365)) &&
              (!('difficulty' in data) || (data.difficulty in ['Easy', 'Medium', 'Hard'])) &&
              (!('date' in data) || (data.date is string && data.date.size() == 10)) &&
-             data.status in ['assigned', 'completed'] &&
+             data.status in ['assigned', 'completed', 'in_progress'] &&
              data.createdAt is timestamp;
     }
 

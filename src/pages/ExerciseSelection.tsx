@@ -76,6 +76,7 @@ export default function ExerciseSelection() {
     setStarting(exercise.id);
     try {
       const today = new Date().toISOString().split('T')[0];
+      console.log("Starting exercise for profile:", profile.uid);
       
       // 1. Create master exercise if it doesn't exist (or just use a dummy ID if it's self-guided)
       // For simplicity, we'll just add to todays_plan directly for self-guided sessions
@@ -88,6 +89,7 @@ export default function ExerciseSelection() {
         addedBy: 'patient',
         targetReps: 10
       });
+      console.log("Plan created with ID:", planId);
 
       // We still need a master exercise ID for the session page to fetch details if it relies on 'exercises' collection
       // But wait, ExerciseSession fetches from 'exercises' collection.
@@ -105,6 +107,7 @@ export default function ExerciseSelection() {
         date: today,
         createdAt: serverTimestamp()
       });
+      console.log("Exercise doc created with ID:", docRef.id);
 
       navigate(`/exercise/${docRef.id}?planId=${planId}`);
     } catch (error) {
