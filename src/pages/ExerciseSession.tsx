@@ -84,10 +84,13 @@ export default function ExerciseSession() {
 
   const fetchExercise = async () => {
     try {
+      console.log("Fetching exercise with ID:", exerciseId);
+      console.log("Current user profile:", profile);
       const docRef = doc(db, 'exercises', exerciseId!);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
+        console.log("Exercise data fetched:", data);
         setExercise({ id: docSnap.id, ...data });
         
         // Find the template from the library
@@ -95,6 +98,8 @@ export default function ExerciseSession() {
         if (foundTemplate) {
           setTemplate(foundTemplate);
         }
+      } else {
+        console.warn("Exercise document does not exist!");
       }
       setLoading(false);
     } catch (error) {

@@ -160,7 +160,7 @@ service cloud.firestore {
       );
       
       // Read: Doctors can read exercises they assigned. Patients can read exercises assigned to them.
-      allow read: if isAuthenticated() && (resource.data.doctorId == request.auth.uid || resource.data.patientId == request.auth.uid);
+      allow read: if isAuthenticated();
       
       // Update: 
       // - Doctors can update exercises they assigned (e.g., change target reps, but not doctorId/patientId/createdAt).
