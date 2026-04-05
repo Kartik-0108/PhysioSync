@@ -25,6 +25,7 @@ export default function ExerciseSession() {
   const [exercise, setExercise] = useState<any>(null);
   const [template, setTemplate] = useState<ExerciseTemplate | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   // ... rest of state ...
   const [reps, setReps] = useState(0);
   const [leftReps, setLeftReps] = useState(0);
@@ -108,13 +109,16 @@ export default function ExerciseSession() {
           setTemplate(foundTemplate);
         } else {
           console.error("Template not found for type:", data.type);
+          setError("Exercise template not found.");
         }
       } else {
         console.warn("Exercise document does not exist in Firestore at path: exercises/" + exerciseId);
+        setError("Exercise not found.");
       }
       setLoading(false);
     } catch (error) {
       console.error("Error in fetchExercise:", error);
+      setError("Failed to load exercise. Please check your permissions.");
       setLoading(false);
     }
   };
@@ -413,6 +417,7 @@ export default function ExerciseSession() {
   }, [isStarted, isFinished, isPaused]);
 
   if (loading) return <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center transition-colors duration-200"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div></div>;
+  if (error) return <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-red-500 flex items-center justify-center transition-colors duration-200">{error}</div>;
   if (!exercise) return <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white flex items-center justify-center transition-colors duration-200">Exercise not found</div>;
 
   const isNeckRotation = exercise.type === 'neck_rotation';

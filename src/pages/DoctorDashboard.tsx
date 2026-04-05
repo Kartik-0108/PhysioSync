@@ -236,7 +236,7 @@ export default function DoctorDashboard() {
               >
                 <User className="w-5 h-5" />
               </button>
-              <NotificationBell />
+              <NotificationBell position="bottom" />
               <ThemeToggle />
             </div>
             <button 

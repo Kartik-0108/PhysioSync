@@ -15,7 +15,11 @@ interface AppNotification {
   type: 'assigned' | 'completed' | 'feedback';
 }
 
-export function NotificationBell() {
+interface NotificationBellProps {
+  position?: 'top' | 'bottom';
+}
+
+export function NotificationBell({ position = 'top' }: NotificationBellProps) {
   const { profile } = useAuthStore();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -37,6 +41,8 @@ export function NotificationBell() {
         ...doc.data()
       })) as AppNotification[];
       setNotifications(notifs);
+    }, (error) => {
+      console.error("Error fetching notifications:", error);
     });
 
     return () => unsubscribe();
@@ -81,7 +87,10 @@ export function NotificationBell() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          console.log("Notification bell clicked, toggling isOpen to:", !isOpen);
+          setIsOpen(!isOpen);
+        }}
         className="relative p-2 rounded-xl bg-white/40 dark:bg-slate-800/40 hover:bg-white/60 dark:hover:bg-slate-700/60 backdrop-blur-md border border-white/20 dark:border-slate-700/30 transition-all shadow-sm"
       >
         <Bell className="w-5 h-5 text-slate-700 dark:text-slate-300" />
@@ -93,7 +102,11 @@ export function NotificationBell() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 transform origin-top-right transition-all">
+        <div className={`absolute w-72 sm:w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 transition-all ${
+          position === 'top' 
+            ? 'top-full mt-2 right-0 origin-top-right' 
+            : 'bottom-full mb-2 left-0 origin-bottom-left'
+        }`}>
           <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
             <h3 className="font-bold text-slate-900 dark:text-white">Notifications</h3>
             {unreadCount > 0 && (
