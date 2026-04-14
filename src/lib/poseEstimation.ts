@@ -32,8 +32,8 @@ export class PoseEstimator {
     );
     this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
       baseOptions: {
-        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
-        delegate: "CPU"
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+        delegate: "GPU"
       },
       runningMode: this.runningMode,
       numPoses: 1,
@@ -195,17 +195,10 @@ export class PoseEstimator {
             
             if (isIncorrect) {
               ctx.strokeStyle = `rgba(239, 68, 68, ${0.9 + pulse * 0.1})`; // Red with pulse
-              ctx.shadowColor = '#ef4444';
-              ctx.shadowBlur = 20 + pulse * 15;
             } else {
               ctx.strokeStyle = 'rgba(16, 185, 129, 0.95)'; // Green
-              ctx.shadowColor = '#10b981';
-              ctx.shadowBlur = 15;
             }
             ctx.stroke();
-            
-            // Reset shadow for next drawing
-            ctx.shadowBlur = 0;
           }
         }
 
@@ -223,12 +216,8 @@ export class PoseEstimator {
             if (isIncorrect) {
               radius += pulse * 4; // Pulse size for incorrect joints
               ctx.fillStyle = '#ef4444';
-              ctx.shadowColor = '#ef4444';
-              ctx.shadowBlur = 25;
             } else {
               ctx.fillStyle = '#10b981';
-              ctx.shadowColor = '#10b981';
-              ctx.shadowBlur = 20;
             }
             
             ctx.arc(point.x * canvas.width, point.y * canvas.height, radius, 0, 2 * Math.PI);
@@ -237,8 +226,6 @@ export class PoseEstimator {
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3;
             ctx.stroke();
-            
-            ctx.shadowBlur = 0; // Reset
           }
         }
       }

@@ -173,9 +173,13 @@ export default function ExerciseSession() {
       canvas.height = video.videoHeight;
       
       let nowInMs = performance.now();
-      if (nowInMs <= stateRef.current.lastTime) {
-        nowInMs = stateRef.current.lastTime + 1;
+      
+      // Throttle to ~30 FPS (33ms) to save CPU/GPU
+      if (nowInMs - stateRef.current.lastTime < 33) {
+        requestRef.current = requestAnimationFrame(detectPose);
+        return;
       }
+      
       stateRef.current.lastTime = nowInMs;
       
       try {
@@ -201,7 +205,9 @@ export default function ExerciseSession() {
 
   const analyzePose = (results: any): { isCorrect: boolean, incorrectJoints: number[] } => {
     if (!results.landmarks || results.landmarks.length === 0) {
-      setFeedback("Please step into the frame");
+      if (stateRef.current.totalFrames % 15 === 0) {
+        setFeedback("Please step into the frame");
+      }
       return { isCorrect: false, incorrectJoints: [] };
     }
     if (!exercise) return { isCorrect: true, incorrectJoints: [] };
@@ -212,7 +218,9 @@ export default function ExerciseSession() {
     const ruleFunction = exerciseRules[exercise.type];
     
     if (!ruleFunction) {
-      setFeedback("Tracking active...");
+      if (stateRef.current.totalFrames % 15 === 0) {
+        setFeedback("Tracking active...");
+      }
       return { isCorrect: true, incorrectJoints: [] };
     }
 
@@ -223,9 +231,53 @@ export default function ExerciseSession() {
       exercise.targetReps
     );
 
-    setFeedback(newFeedback);
+    // Update UI state less frequently to prevent lag (every 5 frames)
+    if (stateRef.current.totalFrames % 5 === 0) {
+      setFeedback(newFeedback);
 
-    // Voice Guidance
+      // Update rotation angle for UI if available
+      if ((stateRef.current as any).rotationAngle !== undefined) {
+        setRotationAngle((stateRef.current as any).rotationAngle);
+      }
+      
+      if ((stateRef.current as any).extensionAngle !== undefined) {
+        setExtensionAngle((stateRef.current as any).extensionAngle);
+      }
+
+      // Calculate reach height for UI
+      if ((stateRef.current as any).reachHeight !== undefined) {
+        setReachHeight((stateRef.current as any).reachHeight);
+      } else if (exercise.type === 'full_body_stretch' && stateRef.current.totalFrames > 0) {
+        // This is a simplified representation for the UI bar
+        setReachHeight(newFeedback.includes("Great reach") ? 100 : newFeedback.includes("Keep reaching") ? 60 : 20);
+      }
+
+      if ((stateRef.current as any).lungeDepth !== undefined) {
+        setLungeDepth((stateRef.current as any).lungeDepth);
+      }
+
+      if ((stateRef.current as any).symmetryScore !== undefined) {
+        setSymmetryScore((stateRef.current as any).symmetryScore);
+      }
+      
+      if ((stateRef.current as any).backAngle !== undefined) {
+        setBackAngle((stateRef.current as any).backAngle);
+      }
+      
+      if ((stateRef.current as any).armAlignment !== undefined) {
+        setArmAlignment((stateRef.current as any).armAlignment);
+      }
+
+      if (stateRef.current.kneeAngle !== undefined) {
+        setSquatAngle(stateRef.current.kneeAngle);
+      }
+
+      if (stateRef.current.squatState !== undefined) {
+        setSquatState(stateRef.current.squatState);
+      }
+    }
+
+    // Voice Guidance (keep outside throttle to ensure it triggers when needed)
     if (newFeedback !== lastVoiceFeedback.current && isStarted && !isFinished) {
       const utterance = new SpeechSynthesisUtterance(newFeedback);
       utterance.rate = 1.1;
@@ -305,47 +357,6 @@ export default function ExerciseSession() {
     }
     
     if (isCorrect) stateRef.current.correctFrames++;
-    
-    // Update rotation angle for UI if available
-    if ((stateRef.current as any).rotationAngle !== undefined) {
-      setRotationAngle((stateRef.current as any).rotationAngle);
-    }
-    
-    if ((stateRef.current as any).extensionAngle !== undefined) {
-      setExtensionAngle((stateRef.current as any).extensionAngle);
-    }
-
-    // Calculate reach height for UI
-    if ((stateRef.current as any).reachHeight !== undefined) {
-      setReachHeight((stateRef.current as any).reachHeight);
-    } else if (exercise.type === 'full_body_stretch' && stateRef.current.totalFrames > 0) {
-      // This is a simplified representation for the UI bar
-      setReachHeight(feedback.includes("Great reach") ? 100 : feedback.includes("Keep reaching") ? 60 : 20);
-    }
-
-    if ((stateRef.current as any).lungeDepth !== undefined) {
-      setLungeDepth((stateRef.current as any).lungeDepth);
-    }
-
-    if ((stateRef.current as any).symmetryScore !== undefined) {
-      setSymmetryScore((stateRef.current as any).symmetryScore);
-    }
-    
-    if ((stateRef.current as any).backAngle !== undefined) {
-      setBackAngle((stateRef.current as any).backAngle);
-    }
-    
-    if ((stateRef.current as any).armAlignment !== undefined) {
-      setArmAlignment((stateRef.current as any).armAlignment);
-    }
-
-    if (stateRef.current.kneeAngle !== undefined) {
-      setSquatAngle(stateRef.current.kneeAngle);
-    }
-
-    if (stateRef.current.squatState !== undefined) {
-      setSquatState(stateRef.current.squatState);
-    }
     
     // Update accuracy every 30 frames to avoid flickering
     if (stateRef.current.totalFrames % 30 === 0) {
