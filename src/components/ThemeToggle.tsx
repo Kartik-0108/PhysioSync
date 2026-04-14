@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { useThemeStore } from '../store/useThemeStore';
 
+// test and try
+
 export function ThemeToggle() {
   const { theme, toggleTheme, setTheme } = useThemeStore();
 
