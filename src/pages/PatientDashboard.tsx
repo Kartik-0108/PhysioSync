@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, getDocs, orderBy, limit, deleteDoc, doc, addDoc, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, deleteDoc, doc, addDoc, Timestamp, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useAuthStore } from '../store/useAuthStore';
 import { Activity, LogOut, TrendingUp, Award, Zap, Calendar as CalendarIcon, Bell, User, Sparkles, History, ArrowRight, CheckCircle2, Clock } from 'lucide-react';
@@ -24,33 +24,49 @@ export default function PatientDashboard() {
   const [notification, setNotification] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile?.uid) {
-      fetchData();
-    }
+    if (!profile?.uid) return;
+
+    fetchInitialData();
+
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const q = query(
+      collection(db, 'todays_plan'),
+      where('userId', '==', profile.uid),
+      where('date', '==', today)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const livePlan = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as DailyPlanItem[];
+      setPlan(livePlan);
+    });
+
+    return () => unsubscribe();
   }, [profile]);
 
-  const fetchData = async () => {
+  const fetchInitialData = async () => {
     try {
       if (!profile?.uid) return;
 
-      // 1. Fetch Today's Plan
+      // 1. Fetch Today's Plan natively to do the daily fallback check
       let todayPlan = await dailyPlanService.getTodayPlan(profile.uid);
 
-      // 2. Daily Reset Logic: If empty, populate from master exercises
-      if (todayPlan.length === 0) {
-        const exQuery = query(
-          collection(db, 'exercises'), 
-          where('patientId', '==', profile.uid)
-        );
-        const exSnapshot = await getDocs(exQuery);
-        const masterExercises = exSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        // Filter active exercises (assigned or in_progress)
-        const activeExercises = masterExercises.filter((ex: any) => ex.status === 'assigned' || ex.status === 'in_progress');
-        
-        // Create daily plan items
+      // 2. Daily Reset & Sync Logic: Ensure all active master exercises are in today's plan
+      const exQuery = query(
+        collection(db, 'exercises'), 
+        where('patientId', '==', profile.uid)
+      );
+      const exSnapshot = await getDocs(exQuery);
+      const masterExercises = exSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Filter active exercises (assigned or in_progress)
+      const activeExercises = masterExercises.filter((ex: any) => ex.status === 'assigned' || ex.status === 'in_progress');
+      
+      // Find active exercises that are missing from today's plan
+      const missingExercises = activeExercises.filter(ex => !todayPlan.some(p => p.exerciseId === ex.id));
+      
+      if (missingExercises.length > 0) {
         const today = format(new Date(), 'yyyy-MM-dd');
-        const newPlanItems = await Promise.all(activeExercises.map(async (ex: any) => {
+        for (const ex of missingExercises as any[]) {
           const newItem = {
             userId: profile.uid,
             exerciseId: ex.id,
@@ -62,14 +78,10 @@ export default function PatientDashboard() {
             targetReps: ex.targetReps,
             createdAt: Timestamp.now()
           };
-          const docRef = await addDoc(collection(db, 'todays_plan'), newItem);
-          return { id: docRef.id, ...newItem } as DailyPlanItem;
-        }));
-        todayPlan = newPlanItems;
+          await addDoc(collection(db, 'todays_plan'), newItem);
+        }
       }
       
-      setPlan(todayPlan);
-
       // 3. Fetch Results
       const resQuery = query(
         collection(db, 'results'),
@@ -156,7 +168,7 @@ export default function PatientDashboard() {
           <div className="flex items-center space-x-3">
             <button 
               onClick={() => navigate('/profile')}
-              className="flex items-center space-x-2 text-slate-600 dark:text-slate-300 hover:text-emerald-500 transition-colors px-4 py-2.5 rounded-xl bg-white/40 dark:bg-slate-800/40 hover:bg-white/60 dark:hover:bg-slate-700/60 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 shadow-sm font-bold"
+              className="flex items-center space-x-2 text-slate-600 dark:text-slate-300 hover:text-emerald-500 transition-colors px-4 py-2.5 rounded-xl bg-white/40 dark:bg-slate-900/60 hover:bg-white/60 dark:hover:bg-slate-800/80 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-sm font-bold"
             >
               <User className="w-5 h-5" />
               <span>Profile</span>
@@ -165,7 +177,7 @@ export default function PatientDashboard() {
             <ThemeToggle />
             <button 
               onClick={handleLogout}
-              className="flex items-center space-x-2 text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-colors px-4 py-2.5 rounded-xl bg-white/40 dark:bg-slate-800/40 hover:bg-white/60 dark:hover:bg-slate-700/60 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 shadow-sm"
+              className="flex items-center space-x-2 text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-colors px-4 py-2.5 rounded-xl bg-white/40 dark:bg-slate-900/60 hover:bg-white/60 dark:hover:bg-slate-800/80 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-sm"
             >
               <LogOut className="w-5 h-5" />
               <span className="font-bold">Logout</span>
@@ -175,7 +187,7 @@ export default function PatientDashboard() {
 
         {/* Daily Summary Section */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="md:col-span-3 bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row items-center gap-8">
+          <div className="md:col-span-3 bg-white/40 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row items-center gap-8">
             <div className="flex-shrink-0">
               <CircularProgress percentage={progressPercentage} size={120} strokeWidth={10}>
                 <div className="text-center">
@@ -218,7 +230,7 @@ export default function PatientDashboard() {
           <div className="lg:col-span-1 space-y-6">
             
             {/* Smart Suggestions */}
-            <div className="bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 rounded-3xl p-6 shadow-xl">
+            <div className="bg-white/40 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center">
                 <Sparkles className="w-5 h-5 mr-2 text-amber-500" />
                 Smart Suggestions
@@ -228,7 +240,7 @@ export default function PatientDashboard() {
                   <p className="text-sm text-slate-500 dark:text-slate-400 italic">No suggestions yet. Complete more sessions for personalized insights!</p>
                 ) : (
                   suggestions.map((s, i) => (
-                    <div key={i} className="bg-white/50 dark:bg-slate-900/50 rounded-2xl p-4 border border-white/20 dark:border-slate-700/30">
+                    <div key={i} className="bg-white/50 dark:bg-slate-800/60 rounded-2xl p-4 border border-white/20 dark:border-white/5">
                       <div className="flex items-center gap-3 mb-2">
                         <div className={`p-2 rounded-lg ${s.type === 'missed' ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400'}`}>
                           {s.type === 'missed' ? <Clock className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
@@ -254,7 +266,7 @@ export default function PatientDashboard() {
             </div>
 
             {/* Performance Trend */}
-            <div className="bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 rounded-3xl p-6 shadow-xl">
+            <div className="bg-white/40 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center">
                   <TrendingUp className="w-5 h-5 mr-2 text-blue-500" />
@@ -276,11 +288,11 @@ export default function PatientDashboard() {
               </div>
 
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-white/50 dark:bg-slate-900/50 rounded-xl p-3 border border-white/20 dark:border-slate-700/30">
+                <div className="bg-white/50 dark:bg-slate-800/60 rounded-xl p-3 border border-white/20 dark:border-white/5">
                   <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Avg Accuracy</div>
                   <div className="text-xl font-black text-slate-900 dark:text-white">{averageAccuracy}%</div>
                 </div>
-                <div className="bg-white/50 dark:bg-slate-900/50 rounded-xl p-3 border border-white/20 dark:border-slate-700/30">
+                <div className="bg-white/50 dark:bg-slate-800/60 rounded-xl p-3 border border-white/20 dark:border-white/5">
                   <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Reps Today</div>
                   <div className="text-xl font-black text-slate-900 dark:text-white">{totalRepsToday}</div>
                 </div>
@@ -326,7 +338,7 @@ export default function PatientDashboard() {
                 ))}
               </div>
             ) : plan.length === 0 ? (
-              <div className="bg-white/30 dark:bg-slate-800/30 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 rounded-3xl p-12 text-center shadow-inner">
+              <div className="bg-white/30 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-12 text-center shadow-inner">
                 <div className="w-20 h-20 bg-slate-200/50 dark:bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Activity className="w-10 h-10 text-slate-400 dark:text-slate-500" />
                 </div>

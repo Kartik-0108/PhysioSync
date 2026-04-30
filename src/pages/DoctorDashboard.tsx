@@ -118,7 +118,7 @@ export default function DoctorDashboard() {
     if (!selectedTemplate) return;
 
     try {
-      await addDoc(collection(db, 'exercises'), {
+      const exerciseDocRef = await addDoc(collection(db, 'exercises'), {
         doctorId: profile.uid,
         patientId: selectedPatient.id,
         addedBy: 'doctor',
@@ -128,6 +128,20 @@ export default function DoctorDashboard() {
         durationDays: newDuration,
         difficulty: newDifficulty,
         status: 'assigned',
+        createdAt: serverTimestamp()
+      });
+
+      // Add to today's plan immediately
+      const today = new Date().toISOString().split('T')[0];
+      await addDoc(collection(db, 'todays_plan'), {
+        userId: selectedPatient.id,
+        exerciseId: exerciseDocRef.id,
+        exerciseType: newExerciseType,
+        exerciseName: selectedTemplate.name,
+        date: today,
+        status: 'not_started',
+        addedBy: 'doctor',
+        targetReps: newTargetReps,
         createdAt: serverTimestamp()
       });
 
@@ -180,7 +194,7 @@ export default function DoctorDashboard() {
   return (
     <div className="min-h-screen bg-transparent text-slate-900 dark:text-slate-100 flex flex-col md:flex-row transition-colors duration-200">
       {/* Sidebar */}
-      <div className="w-full md:w-72 bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border-r border-white/20 dark:border-slate-700/30 p-6 flex flex-col transition-colors duration-200 shadow-xl z-20">
+      <div className="w-full md:w-72 bg-white/40 dark:bg-slate-900/60 backdrop-blur-xl border-r border-white/20 dark:border-white/5 p-6 flex flex-col transition-colors duration-200 shadow-xl z-20">
         <div className="flex items-center space-x-3 mb-10">
           <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/20">
             <Activity className="w-6 h-6 text-white" />
@@ -323,7 +337,7 @@ export default function DoctorDashboard() {
                     <select 
                       value={newExerciseType}
                       onChange={(e) => setNewExerciseType(e.target.value)}
-                      className="w-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-md border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-200 appearance-none"
+                      className="w-full bg-white/50 dark:bg-slate-800/60 backdrop-blur-md border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-200 appearance-none"
                     >
                       {EXERCISE_LIBRARY.map(ex => (
                         <option key={ex.id} value={ex.id}>{ex.name}</option>
@@ -408,7 +422,7 @@ export default function DoctorDashboard() {
 
                 <div className="grid gap-4">
                   {filteredExercises.length === 0 ? (
-                    <div className="bg-white/30 dark:bg-slate-800/30 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 rounded-3xl p-12 text-center shadow-inner">
+                    <div className="bg-white/30 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 rounded-3xl p-12 text-center shadow-inner">
                       <Activity className="w-10 h-10 text-slate-400 mx-auto mb-4" />
                       <p className="text-slate-500 dark:text-slate-400 font-medium">No exercises found for this patient.</p>
                     </div>
